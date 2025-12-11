@@ -11,9 +11,23 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-        - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup env file from secrets in the tbspartner directory
-        run: echo "${{ secrets.PROD_ENV }}" > tbspartner/.env
-      # Add your steps here
+        run: echo "${{ secrets.PROD_ENV }}" > .env
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.DEPLOY_ACTOR }}
+          password: ${{ secrets.DEPLOY_TOKEN }}
+
+      - name: Build Docker image
+        run: docker build -t ghcr.io/denogeek/tbspartner:latest .
+
+      - name: Push Docker image
+        run: docker push ghcr.io/denogeek/tbspartner:latest
+
+
 
