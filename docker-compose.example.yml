@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  tbspartner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Build-time argument - API URL is embedded into the JavaScript bundle
+        # You must rebuild the image to change this value
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+

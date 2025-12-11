@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+        - uses: actions/checkout@v4
+
+      - name: Setup env file from secrets in the tbspartner directory
+        run: echo "${{ secrets.PROD_ENV }}" > tbspartner/.env
+      # Add your steps here
+
