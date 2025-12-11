@@ -101,3 +101,33 @@ body {
     @apply backdrop-blur-md bg-background/80;
   }
 }
+
+/* Login page animations */
+@keyframes gridMove {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(50px, 50px);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translate(var(--float-x, 30px), var(--float-y, -30px)) scale(1.5);
+    opacity: 0.4;
+  }
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
