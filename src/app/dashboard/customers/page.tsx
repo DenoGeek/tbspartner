@@ -3,16 +3,6 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -21,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CustomerFormDialog } from "./customer-form-dialog";
 
 interface CustomerProfile {
   id: string;
@@ -29,8 +20,10 @@ interface CustomerProfile {
   tarrif: string;
   customer_type: number;
   pppoe_username: string | null;
+  pppoe_password?: string | null;
   ip_address: string | null;
   mac_address: string | null;
+  default_plan: string | null;
   user_details: {
     username: string;
     email: string;
@@ -63,25 +56,8 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    username: "",
-    email: "",
-    phone_no: "",
-    first_name: "",
-    last_name: "",
-    password: "",
-    customer_type: "1",
-    pppoe_username: "",
-    pppoe_password: "",
-    ip_address: "",
-    mac_address: "",
-    tarrif: "basic",
-  });
 
   useEffect(() => {
     fetchCustomers();
@@ -100,106 +76,14 @@ export default function CustomersPage() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      username: "",
-      email: "",
-      phone_no: "",
-      first_name: "",
-      last_name: "",
-      password: "",
-      customer_type: "1",
-      pppoe_username: "",
-      pppoe_password: "",
-      ip_address: "",
-      mac_address: "",
-      tarrif: "basic",
-    });
-    setEditingCustomerId(null);
-  };
-
   const openCreateDialog = () => {
-    resetForm();
+    setEditingCustomerId(null);
     setDialogOpen(true);
   };
 
-  const loadCustomerForEdit = async (customerId: string) => {
-    try {
-      const customer = await apiClient.get<CustomerProfile>(`/api/v1/customers/${customerId}/`);
-      setFormData({
-        username: customer.user_details?.username || "",
-        email: customer.user_details?.email || "",
-        phone_no: customer.user_details?.phone_no || "",
-        first_name: customer.user_details?.first_name || "",
-        last_name: customer.user_details?.last_name || "",
-        password: "", // Don't load password
-        customer_type: customer.customer_type.toString(),
-        pppoe_username: customer.pppoe_username || "",
-        pppoe_password: "", // Don't load password
-        ip_address: customer.ip_address || "",
-        mac_address: customer.mac_address || "",
-        tarrif: customer.tarrif || "basic",
-      });
-      setEditingCustomerId(customerId);
-      setDialogOpen(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load customer");
-    }
-  };
-
-  const handleSubmitCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreating(true);
-    setError("");
-
-    try {
-      if (editingCustomerId) {
-        // Update existing customer
-        await apiClient.put(`/api/v1/customers/${editingCustomerId}/`, formData);
-      } else {
-        // Create new customer
-        await apiClient.post("/api/v1/customers/", formData);
-      }
-      setDialogOpen(false);
-      resetForm();
-      await fetchCustomers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save customer");
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => {
-      const updated = { ...prev, [name]: value };
-      // Clear fields when customer type changes
-      if (name === "customer_type") {
-        if (value === "1") {
-          // Hotspot: clear all networking fields
-          updated.pppoe_username = "";
-          updated.pppoe_password = "";
-          updated.ip_address = "";
-          updated.mac_address = "";
-        } else if (value === "2") {
-          // PPPoE: clear IP and MAC
-          updated.ip_address = "";
-          updated.mac_address = "";
-        } else if (value === "3") {
-          // Static: clear PPPoE and MAC
-          updated.pppoe_username = "";
-          updated.pppoe_password = "";
-          updated.mac_address = "";
-        } else if (value === "4") {
-          // Home: clear PPPoE and IP
-          updated.pppoe_username = "";
-          updated.pppoe_password = "";
-          updated.ip_address = "";
-        }
-      }
-      return updated;
-    });
+  const handleEditCustomer = (customerId: string) => {
+    setEditingCustomerId(customerId);
+    setDialogOpen(true);
   };
 
   // Pagination calculations
@@ -231,190 +115,17 @@ export default function CustomersPage() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCustomerId ? "Edit Customer" : "Create New Customer"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCustomerId
-                ? "Update customer profile and user details"
-                : "Create a new customer profile with user details"}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmitCustomer} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">Username *</Label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  value={formData.username}
-                  onChange={handleInputChange}
-                  required
-                  disabled={creating}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  disabled={creating}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone_no">Phone Number</Label>
-                <Input
-                  id="phone_no"
-                  name="phone_no"
-                  type="text"
-                  value={formData.phone_no}
-                  onChange={handleInputChange}
-                  disabled={creating}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  disabled={creating}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="first_name">First Name</Label>
-                <Input
-                  id="first_name"
-                  name="first_name"
-                  type="text"
-                  value={formData.first_name}
-                  onChange={handleInputChange}
-                  disabled={creating}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="last_name">Last Name</Label>
-                <Input
-                  id="last_name"
-                  name="last_name"
-                  type="text"
-                  value={formData.last_name}
-                  onChange={handleInputChange}
-                  disabled={creating}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="customer_type">Customer Type</Label>
-                <select
-                  id="customer_type"
-                  name="customer_type"
-                  value={formData.customer_type}
-                  onChange={handleInputChange}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={creating}
-                >
-                  <option value="1">Hotspot</option>
-                  <option value="2">PPPoE</option>
-                  <option value="3">Static</option>
-                  <option value="4">Home</option>
-                </select>
-              </div>
-              {formData.customer_type === "2" && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="pppoe_username">
-                      PPPoE Username <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="pppoe_username"
-                      name="pppoe_username"
-                      type="text"
-                      value={formData.pppoe_username}
-                      onChange={handleInputChange}
-                      disabled={creating}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pppoe_password">
-                      PPPoE Password <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="pppoe_password"
-                      name="pppoe_password"
-                      type="password"
-                      value={formData.pppoe_password}
-                      onChange={handleInputChange}
-                      disabled={creating}
-                      required
-                    />
-                  </div>
-                </>
-              )}
-              {formData.customer_type === "3" && (
-                <div className="space-y-2">
-                  <Label htmlFor="ip_address">
-                    IP Address <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="ip_address"
-                    name="ip_address"
-                    type="text"
-                    value={formData.ip_address}
-                    onChange={handleInputChange}
-                    disabled={creating}
-                    required
-                  />
-                </div>
-              )}
-              {formData.customer_type === "4" && (
-                <div className="space-y-2">
-                  <Label htmlFor="mac_address">
-                    MAC Address <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="mac_address"
-                    name="mac_address"
-                    type="text"
-                    value={formData.mac_address}
-                    onChange={handleInputChange}
-                    disabled={creating}
-                    required
-                  />
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={creating}>
-                {creating
-                  ? editingCustomerId
-                    ? "Updating..."
-                    : "Creating..."
-                  : editingCustomerId
-                    ? "Update Customer"
-                    : "Create Customer"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CustomerFormDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingCustomerId(null);
+          }
+          setDialogOpen(open);
+        }}
+        editingCustomerId={editingCustomerId}
+        onSaved={fetchCustomers}
+      />
 
       {loading ? (
         <div className="text-center py-8">Loading customers...</div>
@@ -463,7 +174,7 @@ export default function CustomersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => loadCustomerForEdit(customer.id)}
+                        onClick={() => handleEditCustomer(customer.id)}
                       >
                         Edit
                       </Button>

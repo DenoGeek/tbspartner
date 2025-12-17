@@ -21,6 +21,14 @@ class ApiClient {
     this.baseUrl = API_URL;
   }
 
+  private async parseErrorResponse(response: Response) {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -57,7 +65,14 @@ class ApiClient {
             headers: retryHeaders,
           });
           if (!retryResponse.ok) {
-            throw new Error(`API error: ${retryResponse.statusText}`);
+            const retryErrorData = await this.parseErrorResponse(retryResponse);
+            const retryError: any = new Error(
+              (retryErrorData && (retryErrorData.detail || retryErrorData.message)) ||
+                `API error: ${retryResponse.statusText}`,
+            );
+            retryError.status = retryResponse.status;
+            retryError.data = retryErrorData;
+            throw retryError;
           }
           return retryResponse.json();
         }
@@ -75,7 +90,14 @@ class ApiClient {
         }
         throw new Error('Access forbidden');
       }
-      throw new Error(`API error: ${response.statusText}`);
+      const errorData = await this.parseErrorResponse(response);
+      const error: any = new Error(
+        (errorData && (errorData.detail || errorData.message)) ||
+          `API error: ${response.statusText}`,
+      );
+      error.status = response.status;
+      error.data = errorData;
+      throw error;
     }
 
     return response.json();
