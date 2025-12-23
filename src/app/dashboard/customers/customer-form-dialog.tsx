@@ -122,6 +122,43 @@ const customerSchema = customerSchemaBase.superRefine((data, ctx) => {
   }
 });
 
+/**
+ * Generates a secure random password
+ * @param length - Length of the password (default: 16)
+ * @returns A random password string
+ */
+function generateRandomPassword(length: number = 16): string {
+  const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const lowercase = "abcdefghijklmnopqrstuvwxyz";
+  const numbers = "0123456789";
+  const special = "!@#$%^&*";
+  const allChars = uppercase + lowercase + numbers + special;
+
+  // Use crypto.getRandomValues for secure randomness
+  const array = new Uint32Array(length);
+  crypto.getRandomValues(array);
+
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    const randomIndex = array[i] % allChars.length;
+    password += allChars[randomIndex];
+  }
+
+  // Ensure at least one character from each set
+  const randomUpper = Math.floor(Math.random() * uppercase.length);
+  const randomLower = Math.floor(Math.random() * lowercase.length);
+  const randomNumber = Math.floor(Math.random() * numbers.length);
+  const randomSpecial = Math.floor(Math.random() * special.length);
+
+  password = password.slice(0, -4) + uppercase[randomUpper] + lowercase[randomLower] + numbers[randomNumber] + special[randomSpecial];
+
+  // Shuffle the password
+  return password
+    .split("")
+    .sort(() => Math.random() - 0.5)
+    .join("");
+}
+
 export function CustomerFormDialog({
   open,
   onOpenChange,
@@ -276,12 +313,23 @@ export function CustomerFormDialog({
     setValidationErrors({});
 
     try {
-      const payload: CustomerFormData & { default_plan: string | null } = {
+      // Prepare payload
+      let payload: CustomerFormData & { default_plan: string | null } = {
         ...formData,
         default_plan: selectedBillingPlan
           ? selectedBillingPlan.id
           : formData.default_plan || "",
       };
+
+      // Auto-generate password when creating if not provided
+      if (!editingCustomerId && (!payload.password || payload.password.trim() === "")) {
+        payload.password = generateRandomPassword();
+      }
+
+      // When editing, set password to empty string if not provided (backend will keep current password)
+      if (editingCustomerId && (!payload.password || payload.password.trim() === "")) {
+        payload.password = "";
+      }
 
       const parseResult = customerSchema.safeParse(payload);
       if (!parseResult.success) {
@@ -447,7 +495,18 @@ export function CustomerFormDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">
+                Password
+                {editingCustomerId ? (
+                  <span className="text-muted-foreground font-normal ml-1">
+                    (optional - leave blank to keep current)
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground font-normal ml-1">
+                    (optional - will be auto-generated if blank)
+                  </span>
+                )}
+              </Label>
               <Input
                 id="password"
                 name="password"

@@ -135,13 +135,90 @@ export default function VouchersPage() {
         customer_profile: selectedCustomer.id,
       };
 
-      await apiClient.post("/api/v1/vouchers/purchase/", submitData);
+      await apiClient.post("/api/v1/vouchers/partner_purchase/", submitData);
       setDialogOpen(false);
       resetForm();
       await fetchVouchers();
-    } catch (err: any) {
-      const errorMessage = err?.response?.data?.errors || err?.message || "Failed to create voucher";
-      setError(typeof errorMessage === "string" ? errorMessage : JSON.stringify(errorMessage));
+    } catch (err: unknown) {
+      // Handle validation errors from the API
+      // apiClient uses fetch, so error structure is: { data: {...}, status: number, message: string }
+      const apiError = err as { data?: { errors?: unknown; non_field_errors?: unknown } | unknown; status?: number; message?: string };
+      
+      // Check both apiError.data.errors and apiError.data directly
+      // Sometimes errors are in data.errors, sometimes directly in data
+      const errorData = apiError?.data;
+      let errors: unknown = undefined;
+      
+      if (errorData && typeof errorData === 'object') {
+        // Check if errors are nested in an 'errors' property
+        if ('errors' in errorData) {
+          errors = (errorData as { errors?: unknown }).errors;
+        } else if ('non_field_errors' in errorData || Object.keys(errorData).length > 0) {
+          // Errors might be directly in data (like { non_field_errors: [...] })
+          errors = errorData;
+        }
+      }
+      
+      if (errors) {
+        // If it's an object with field errors, extract and format them
+        if (typeof errors === "object" && !Array.isArray(errors)) {
+          const errorMessages: string[] = [];
+          const errorObj = errors as Record<string, unknown>;
+          
+          // Handle non_field_errors (general validation errors)
+          if (errorObj.non_field_errors) {
+            const nonFieldErrors = Array.isArray(errorObj.non_field_errors) 
+              ? errorObj.non_field_errors 
+              : [errorObj.non_field_errors];
+            // Clean up error messages - remove extra quotes and brackets
+            nonFieldErrors.forEach((e) => {
+              let errorMsg = String(e);
+              // Remove surrounding brackets and quotes if present
+              errorMsg = errorMsg.replace(/^\[['"]|['"]\]$/g, '');
+              errorMsg = errorMsg.replace(/^['"]|['"]$/g, '');
+              if (errorMsg.trim()) {
+                errorMessages.push(errorMsg.trim());
+              }
+            });
+          }
+          
+          // Handle field-specific errors
+          Object.keys(errorObj).forEach((key) => {
+            if (key !== "non_field_errors") {
+              const fieldErrors = Array.isArray(errorObj[key]) 
+                ? errorObj[key] as unknown[] 
+                : [errorObj[key]];
+              fieldErrors.forEach((msg) => {
+                let errorMsg = String(msg);
+                // Clean up error messages
+                errorMsg = errorMsg.replace(/^\[['"]|['"]\]$/g, '');
+                errorMsg = errorMsg.replace(/^['"]|['"]$/g, '');
+                if (errorMsg.trim()) {
+                  errorMessages.push(`${key}: ${errorMsg.trim()}`);
+                }
+              });
+            }
+          });
+          
+          setError(errorMessages.length > 0 ? errorMessages.join(". ") : "Validation failed");
+        } else if (Array.isArray(errors)) {
+          const cleanedErrors = errors.map(e => {
+            let errorMsg = String(e);
+            errorMsg = errorMsg.replace(/^\[['"]|['"]\]$/g, '');
+            errorMsg = errorMsg.replace(/^['"]|['"]$/g, '');
+            return errorMsg.trim();
+          }).filter(e => e);
+          setError(cleanedErrors.join(". "));
+        } else {
+          let errorMsg = String(errors);
+          errorMsg = errorMsg.replace(/^\[['"]|['"]\]$/g, '');
+          errorMsg = errorMsg.replace(/^['"]|['"]$/g, '');
+          setError(errorMsg.trim() || "Failed to create voucher");
+        }
+      } else {
+        // Fallback to message or status text
+        setError(apiError?.message || "Failed to create voucher");
+      }
     } finally {
       setCreating(false);
     }
@@ -188,13 +265,16 @@ export default function VouchersPage() {
         <Button onClick={openCreateDialog}>Generate Voucher</Button>
       </div>
 
-      {error && (
-        <div className="bg-destructive/10 text-destructive p-4 rounded-sm border border-destructive/20">
-          {error}
-        </div>
-      )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog 
+        open={dialogOpen} 
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            // Clear error when dialog is closed
+            resetForm();
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Generate Voucher</DialogTitle>
@@ -203,6 +283,11 @@ export default function VouchersPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-destructive/10 text-destructive p-4 rounded-sm border border-destructive/20 text-sm">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Customer *</label>
               <SearchableSelect
