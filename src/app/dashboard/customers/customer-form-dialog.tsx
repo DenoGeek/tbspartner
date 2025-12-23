@@ -487,6 +487,7 @@ export function CustomerFormDialog({
                 value={formData.phone_no}
                 onChange={handleInputChange}
                 disabled={saving}
+                placeholder="712345234 (no country code)"
               />
               {validationErrors.phone_no && (
                 <p className="text-xs text-destructive">
@@ -514,6 +515,7 @@ export function CustomerFormDialog({
                 value={formData.password}
                 onChange={handleInputChange}
                 disabled={saving}
+                autoComplete="new-password"
               />
               {validationErrors.password && (
                 <p className="text-xs text-destructive">
