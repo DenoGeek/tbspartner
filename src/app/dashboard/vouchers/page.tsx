@@ -26,9 +26,6 @@ interface Voucher {
   rad_username: string;
   rad_password: string;
   expiry: string | null;
-  total_packets_used: number;
-  total_time_used: number;
-  total_plan_packets: number;
   billing_plan: {
     id: string;
     display_name: string;
@@ -38,6 +35,37 @@ interface Voucher {
     id: string;
     account_no: string;
   };
+}
+
+interface RadAcctSession {
+  radacctid: number;
+  acctsessionid: string;
+  acctuniqueid: string;
+  username: string;
+  realm: string | null;
+  nasipaddress: string | null;
+  nasportid: string | null;
+  nasporttype: string | null;
+  acctstarttime: string | null;
+  acctupdatetime: string | null;
+  acctstoptime: string | null;
+  acctinterval: number | null;
+  acctsessiontime: number | null;
+  acctauthentic: string | null;
+  connectinfo_start: string | null;
+  connectinfo_stop: string | null;
+  acctinputoctets: number | null;
+  acctoutputoctets: number | null;
+  calledstationid: string | null;
+  callingstationid: string | null;
+  acctterminatecause: string | null;
+  servicetype: string | null;
+  framedprotocol: string | null;
+  framedipaddress: string | null;
+  framedipv6address: string | null;
+  framedipv6prefix: string | null;
+  framedinterfaceid: string | null;
+  delegatedipv6prefix: string | null;
 }
 
 interface Customer {
@@ -69,6 +97,10 @@ export default function VouchersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedBillingPlan, setSelectedBillingPlan] = useState<BillingPlan | null>(null);
+  const [sessionsDialogOpen, setSessionsDialogOpen] = useState(false);
+  const [selectedVoucherUsername, setSelectedVoucherUsername] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<RadAcctSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   useEffect(() => {
     fetchVouchers();
@@ -235,15 +267,15 @@ export default function VouchersPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B";
+  const formatBytes = (bytes: number | null) => {
+    if (!bytes || bytes === 0) return "0 B";
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
-  const formatTime = (seconds: number) => {
+  const formatTime = (seconds: number | null) => {
     if (!seconds) return "0s";
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -251,6 +283,25 @@ export default function VouchersPage() {
     if (hours > 0) return `${hours}h ${minutes}m`;
     if (minutes > 0) return `${minutes}m ${secs}s`;
     return `${secs}s`;
+  };
+
+  const handleViewSessions = async (radUsername: string) => {
+    setSelectedVoucherUsername(radUsername);
+    setSessionsDialogOpen(true);
+    setSessionsLoading(true);
+    setSessions([]);
+
+    try {
+      const data = await apiClient.get<RadAcctSession[]>(
+        `/api/v1/vouchers/voucher_rad_acct_sessions/?username=${encodeURIComponent(radUsername)}`
+      );
+      setSessions(data);
+    } catch (err) {
+      console.error("Failed to load sessions:", err);
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
   };
 
   return (
@@ -355,9 +406,8 @@ export default function VouchersPage() {
                   <TableHead>Username</TableHead>
                   <TableHead>Password</TableHead>
                   <TableHead>Expiry</TableHead>
-                  <TableHead>Data Used</TableHead>
-                  <TableHead>Time Used</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -381,17 +431,18 @@ export default function VouchersPage() {
                         : "N/A"}
                     </TableCell>
                     <TableCell>
-                      {voucher.total_plan_packets > 0
-                        ? `${formatBytes(voucher.total_packets_used)} / ${formatBytes(voucher.total_plan_packets)}`
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      {formatTime(voucher.total_time_used)}
-                    </TableCell>
-                    <TableCell>
                       {voucher.expiry && new Date(voucher.expiry) > new Date()
                         ? "Active"
                         : "Expired"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewSessions(voucher.rad_username)}
+                      >
+                        View Sessions
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -425,6 +476,89 @@ export default function VouchersPage() {
           )}
         </div>
       )}
+
+      {/* Sessions Dialog */}
+      <Dialog open={sessionsDialogOpen} onOpenChange={setSessionsDialogOpen}>
+        <DialogContent className="!max-w-[91.666667%] sm:!max-w-[91.666667%] md:!max-w-[75%] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Sessions for {selectedVoucherUsername}
+            </DialogTitle>
+            <DialogDescription>
+              View all RadAcct sessions for this voucher
+            </DialogDescription>
+          </DialogHeader>
+          {sessionsLoading ? (
+            <div className="text-center py-8">Loading sessions...</div>
+          ) : sessions.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No sessions found for this voucher.
+            </div>
+          ) : (
+            <div className="rounded-sm border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Session ID</TableHead>
+                    <TableHead>Start Time</TableHead>
+                    <TableHead>Stop Time</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>NAS IP</TableHead>
+                    <TableHead>Upload</TableHead>
+                    <TableHead>Download</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Terminate Cause</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessions.map((session) => {
+                    const upload = session.acctinputoctets || 0;
+                    const download = session.acctoutputoctets || 0;
+                    const total = upload + download;
+                    return (
+                      <TableRow key={session.radacctid}>
+                        <TableCell className="font-mono text-xs">
+                          {session.acctsessionid}
+                        </TableCell>
+                        <TableCell>
+                          {session.acctstarttime
+                            ? new Date(session.acctstarttime).toLocaleString()
+                            : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          {session.acctstoptime
+                            ? new Date(session.acctstoptime).toLocaleString()
+                            : "Active"}
+                        </TableCell>
+                        <TableCell>
+                          {formatTime(session.acctsessiontime)}
+                        </TableCell>
+                        <TableCell>{session.nasipaddress || "N/A"}</TableCell>
+                        <TableCell>{formatBytes(upload)}</TableCell>
+                        <TableCell>{formatBytes(download)}</TableCell>
+                        <TableCell className="font-medium">
+                          {formatBytes(total)}
+                        </TableCell>
+                        <TableCell>
+                          {session.acctterminatecause || "N/A"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSessionsDialogOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
