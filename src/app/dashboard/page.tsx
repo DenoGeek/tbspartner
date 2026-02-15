@@ -78,6 +78,9 @@ const COMMISSION_TYPE_NAMES: Record<number, string> = {
   11: "Commission pay out",
 };
 
+const REFERRAL_MESSAGE_TEMPLATE = (code: string) =>
+  `Enjoy fast browsing, signup at https://truthwifi.com/register_account.html?r_code_d=${code} with referral code: ${code}`;
+
 export default function DashboardPage() {
   const { partnerType, user, loading: userLoading } = usePartnerUser();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -85,6 +88,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [messageCopied, setMessageCopied] = useState(false);
 
   const isMarketer = partnerType === "marketer";
 
@@ -93,6 +97,14 @@ export default function DashboardPage() {
       navigator.clipboard.writeText(user.referral_code);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
+    }
+  }, [user?.referral_code]);
+
+  const handleCopyMessage = useCallback(() => {
+    if (user?.referral_code) {
+      navigator.clipboard.writeText(REFERRAL_MESSAGE_TEMPLATE(user.referral_code));
+      setMessageCopied(true);
+      window.setTimeout(() => setMessageCopied(false), 2000);
     }
   }, [user?.referral_code]);
 
@@ -173,14 +185,24 @@ export default function DashboardPage() {
               {user?.referral_code ?? "No referral code assigned"}
             </span>
             {user?.referral_code ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCopyReferralCode}
-              >
-                <Copy className="mr-2 h-4 w-4" />
-                {copied ? "Copied!" : "Copy"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyReferralCode}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyMessage}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  {messageCopied ? "Copied!" : "Copy message"}
+                </Button>
+              </div>
             ) : null}
           </CardContent>
         </Card>
