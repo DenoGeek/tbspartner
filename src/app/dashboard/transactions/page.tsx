@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
+import { usePartnerUser } from "@/contexts/partner-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ interface PaymentTransaction {
   id: string;
   amount: number;
   balance: number;
+  commission_balance?: number;
   type: number;
   type_display: string;
   narrative: string;
@@ -60,9 +62,14 @@ const TRANSACTION_TYPES: Record<number, string> = {
   7: "Payment reversal",
   8: "Balance transfer",
   9: "Voucher refund",
+  10: "Commission earn",
+  11: "Commission pay out",
 };
 
 export default function TransactionsPage() {
+  const { partnerType } = usePartnerUser();
+  const isMarketer = partnerType === "marketer";
+
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -80,8 +87,10 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     fetchTransactions();
-    fetchCustomers();
-  }, []);
+    if (!isMarketer) {
+      fetchCustomers();
+    }
+  }, [isMarketer]);
 
   const fetchTransactions = async () => {
     try {
@@ -171,12 +180,18 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Transactions</h1>
+          <h1 className="text-2xl font-semibold">
+            {isMarketer ? "Commission transactions" : "Transactions"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            View and manage payment transactions for your customers
+            {isMarketer
+              ? "View your commission earn and pay out history"
+              : "View and manage payment transactions for your customers"}
           </p>
         </div>
-        <Button onClick={openCreateDialog}>Record Cash Payment</Button>
+        {!isMarketer && (
+          <Button onClick={openCreateDialog}>Record Cash Payment</Button>
+        )}
       </div>
 
       {error && (
@@ -185,82 +200,86 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record Cash Payment</DialogTitle>
-            <DialogDescription>
-              Record a cash payment for one of your customers
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="customer">Customer *</Label>
-              <SearchableSelect
-                options={customers}
-                value={selectedCustomer}
-                onValueChange={(customer) => {
-                  setSelectedCustomer(customer);
-                  setFormData((prev) => ({ ...prev, customer: customer?.id || "" }));
-                }}
-                getLabel={(customer) => 
-                  `${customer.account_no} - ${customer.user_details?.first_name || ""} ${customer.user_details?.last_name || ""}`.trim() || customer.user_details?.username || customer.account_no
-                }
-                getValue={(customer) => customer.id}
-                placeholder="Select a customer"
-                searchPlaceholder="Search customers..."
-                emptyMessage="No customers found"
-                disabled={creating}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount *</Label>
-              <Input
-                id="amount"
-                name="amount"
-                type="number"
-                step="0.01"
-                value={formData.amount}
-                onChange={handleInputChange}
-                required
-                disabled={creating}
-                placeholder="0.00"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="narrative">Narrative (Optional)</Label>
-              <Input
-                id="narrative"
-                name="narrative"
-                type="text"
-                value={formData.narrative}
-                onChange={handleInputChange}
-                disabled={creating}
-                placeholder="Payment description"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={creating}>
-                {creating ? "Recording..." : "Record Payment"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {!isMarketer && (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Record Cash Payment</DialogTitle>
+              <DialogDescription>
+                Record a cash payment for one of your customers
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="customer">Customer *</Label>
+                <SearchableSelect
+                  options={customers}
+                  value={selectedCustomer}
+                  onValueChange={(customer) => {
+                    setSelectedCustomer(customer);
+                    setFormData((prev) => ({ ...prev, customer: customer?.id || "" }));
+                  }}
+                  getLabel={(customer) =>
+                    `${customer.account_no} - ${customer.user_details?.first_name || ""} ${customer.user_details?.last_name || ""}`.trim() || customer.user_details?.username || customer.account_no
+                  }
+                  getValue={(customer) => customer.id}
+                  placeholder="Select a customer"
+                  searchPlaceholder="Search customers..."
+                  emptyMessage="No customers found"
+                  disabled={creating}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount *</Label>
+                <Input
+                  id="amount"
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  value={formData.amount}
+                  onChange={handleInputChange}
+                  required
+                  disabled={creating}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="narrative">Narrative (Optional)</Label>
+                <Input
+                  id="narrative"
+                  name="narrative"
+                  type="text"
+                  value={formData.narrative}
+                  onChange={handleInputChange}
+                  disabled={creating}
+                  placeholder="Payment description"
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                  disabled={creating}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creating}>
+                  {creating ? "Recording..." : "Record Payment"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {loading ? (
         <div className="text-center py-8">Loading transactions...</div>
       ) : transactions.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
-          No transactions found. Record your first cash payment to get started.
+          {isMarketer
+            ? "No commission transactions yet."
+            : "No transactions found. Record your first cash payment to get started."}
         </div>
       ) : (
         <div className="space-y-4">
@@ -273,7 +292,7 @@ export default function TransactionsPage() {
                   <TableHead>Account No</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead>Balance</TableHead>
+                  <TableHead>{isMarketer ? "Commission balance" : "Balance"}</TableHead>
                   <TableHead>Narrative</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -299,7 +318,12 @@ export default function TransactionsPage() {
                       {transaction.amount >= 0 ? "+" : ""}
                       {transaction.amount.toFixed(2)}
                     </TableCell>
-                    <TableCell>{transaction.balance.toFixed(2)}</TableCell>
+                    <TableCell>
+                      {(isMarketer && transaction.commission_balance != null
+                        ? transaction.commission_balance
+                        : transaction.balance
+                      ).toFixed(2)}
+                    </TableCell>
                     <TableCell className="max-w-xs truncate">
                       {transaction.narrative || "N/A"}
                     </TableCell>

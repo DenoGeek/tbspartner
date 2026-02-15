@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api";
+import { usePartnerUser } from "@/contexts/partner-user";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Copy } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -19,6 +22,16 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+interface TransactionStats {
+  total_transactions: number;
+  total_amount: number;
+  today: { count: number; amount: number };
+  this_month: { count: number; amount: number };
+  last_7_days: Array<{ date: string; amount: number; count: number }>;
+  by_type: Record<number, { count: number; total: number }>;
+  commission_balance?: number;
+}
+
 interface DashboardStats {
   customers: {
     total_customers: number;
@@ -31,24 +44,7 @@ interface DashboardStats {
     average_price: number;
     total_revenue_potential: number;
   };
-  transactions: {
-    total_transactions: number;
-    total_amount: number;
-    today: {
-      count: number;
-      amount: number;
-    };
-    this_month: {
-      count: number;
-      amount: number;
-    };
-    last_7_days: Array<{
-      date: string;
-      amount: number;
-      count: number;
-    }>;
-    by_type: Record<number, { count: number; total: number }>;
-  };
+  transactions: TransactionStats;
 }
 
 const CUSTOMER_TYPE_NAMES: Record<number, string> = {
@@ -77,39 +73,63 @@ const TRANSACTION_TYPE_NAMES: Record<number, string> = {
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
 
+const COMMISSION_TYPE_NAMES: Record<number, string> = {
+  10: "Commission earn",
+  11: "Commission pay out",
+};
+
 export default function DashboardPage() {
+  const { partnerType, user, loading: userLoading } = usePartnerUser();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [commissionStats, setCommissionStats] = useState<TransactionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    fetchDashboardStats();
-  }, []);
+  const isMarketer = partnerType === "marketer";
 
-  const fetchDashboardStats = async () => {
+  const handleCopyReferralCode = useCallback(() => {
+    if (user?.referral_code) {
+      navigator.clipboard.writeText(user.referral_code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    }
+  }, [user?.referral_code]);
+
+  const fetchDashboardStats = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      
-      const [customersStats, billingStats, transactionsStats] = await Promise.all([
-        apiClient.get<DashboardStats['customers']>("/api/v1/customers/stats/"),
-        apiClient.get<DashboardStats['billing_plans']>("/api/v1/billing_plans/stats/"),
-        apiClient.get<DashboardStats['transactions']>("/api/v1/transactions/stats/"),
-      ]);
-
-      setStats({
-        customers: customersStats,
-        billing_plans: billingStats,
-        transactions: transactionsStats,
-      });
+      if (isMarketer) {
+        const data = await apiClient.get<TransactionStats>("/api/v1/transactions/stats/");
+        setCommissionStats(data);
+        setStats(null);
+      } else {
+        const [customersStats, billingStats, transactionsStats] = await Promise.all([
+          apiClient.get<DashboardStats["customers"]>("/api/v1/customers/stats/"),
+          apiClient.get<DashboardStats["billing_plans"]>("/api/v1/billing_plans/stats/"),
+          apiClient.get<TransactionStats>("/api/v1/transactions/stats/"),
+        ]);
+        setStats({
+          customers: customersStats,
+          billing_plans: billingStats,
+          transactions: transactionsStats,
+        });
+        setCommissionStats(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard statistics");
     } finally {
       setLoading(false);
     }
-  };
+  }, [isMarketer]);
 
-  if (loading) {
+  useEffect(() => {
+    if (userLoading) return;
+    fetchDashboardStats();
+  }, [userLoading, fetchDashboardStats]);
+
+  if (userLoading || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Loading dashboard...</div>
@@ -125,6 +145,126 @@ export default function DashboardPage() {
     );
   }
 
+  // Marketer dashboard: commission-focused cards + chart
+  if (isMarketer && commissionStats) {
+    const revenueChartData = commissionStats.last_7_days.map((day) => ({
+      date: new Date(day.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      amount: day.amount,
+      count: day.count,
+    }));
+    const commissionBalance = commissionStats.commission_balance ?? 0;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Overview of your commissions
+          </p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Your referral code</CardTitle>
+            <CardDescription>
+              Share this code so you earn commissions on referred activity.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-row flex-wrap items-center justify-between gap-4">
+            <span className="font-mono text-lg font-semibold">
+              {user?.referral_code ?? "No referral code assigned"}
+            </span>
+            {user?.referral_code ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyReferralCode}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Commissions Earned</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{commissionStats.total_amount.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground">
+                {commissionStats.total_transactions} commission transactions
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Commission Balance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{commissionBalance.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground">
+                Available balance
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">This Month</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {commissionStats.this_month.amount.toFixed(2)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {commissionStats.this_month.count} transactions
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {commissionStats.today.amount.toFixed(2)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {commissionStats.today.count} transactions
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+        {revenueChartData.some((d) => d.amount > 0 || d.count > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Commissions (Last 7 Days)</CardTitle>
+              <CardDescription>Daily commission amounts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={revenueChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="amount"
+                    stroke="#8884d8"
+                    strokeWidth={2}
+                    name="Amount"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // ISP dashboard: full stats
   if (!stats) {
     return null;
   }
@@ -141,7 +281,7 @@ export default function DashboardPage() {
   }));
 
   const transactionTypeData = Object.entries(stats.transactions.by_type).map(([type, data]) => ({
-    name: TRANSACTION_TYPE_NAMES[Number(type)] || `Type ${type}`,
+    name: TRANSACTION_TYPE_NAMES[Number(type)] || COMMISSION_TYPE_NAMES[Number(type)] || `Type ${type}`,
     count: data.count,
     amount: data.total,
   }));

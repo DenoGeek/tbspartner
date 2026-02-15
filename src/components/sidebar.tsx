@@ -7,38 +7,27 @@ import { Users, CreditCard, LogOut, Receipt, Menu, X, LayoutDashboard, Ticket } 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
+import { usePartnerUser } from "@/contexts/partner-user";
 
-const menuItems = [
-  {
-    title: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Customers",
-    href: "/dashboard/customers",
-    icon: Users,
-  },
-  {
-    title: "Billing Plans",
-    href: "/dashboard/billing-plans",
-    icon: CreditCard,
-  },
-  {
-    title: "Transactions",
-    href: "/dashboard/transactions",
-    icon: Receipt,
-  },
-  {
-    title: "Vouchers",
-    href: "/dashboard/vouchers",
-    icon: Ticket,
-  },
+const ispMenuItems = [
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Customers", href: "/dashboard/customers", icon: Users },
+  { title: "Billing Plans", href: "/dashboard/billing-plans", icon: CreditCard },
+  { title: "Transactions", href: "/dashboard/transactions", icon: Receipt },
+  { title: "Vouchers", href: "/dashboard/vouchers", icon: Ticket },
+];
+
+const marketerMenuItems = [
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Transactions", href: "/dashboard/transactions", icon: Receipt },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { partnerType } = usePartnerUser();
+
+  const menuItems = partnerType === "marketer" ? marketerMenuItems : ispMenuItems;
 
   const handleLogout = () => {
     apiClient.logout();

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { PartnerUserProvider } from "@/contexts/partner-user";
 
 export default function DashboardLayout({
   children,
@@ -23,15 +24,17 @@ export default function DashboardLayout({
   }, [router]);
 
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar />
-      <div className="flex flex-1 flex-col ml-64 transition-all duration-200">
-        <Header />
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-6">{children}</div>
-        </main>
+    <PartnerUserProvider>
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex flex-1 flex-col ml-64 transition-all duration-200">
+          <Header />
+          <main className="flex-1 overflow-y-auto">
+            <div className="p-6">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </PartnerUserProvider>
   );
 }
 
